@@ -1,0 +1,20 @@
+{
+  "calendars": [
+    {
+      "id": "lowreal.net_qmpvpqkm1k7umh0jcs0l3qmm2k@group.calendar.google.com",
+      "name": "二人共有",
+      "color": "#4285F4"
+    },
+    {
+      "id": "japanese__ja@holiday.calendar.google.com",
+      "name": "日本の祝日",
+      "color": "#DB4437",
+      "isHoliday": true
+    }
+  ],
+  "display": {
+    "weekStart": 0,
+    "language": "ja-JP",
+    "timezone": "Asia/Tokyo"
+  }
+}
