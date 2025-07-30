@@ -1,20 +1,17 @@
-version: '3.8'
-
 services:
   signage-app:
     build: .
     container_name: signage-app
+    pull_policy: always
     ports:
-      - "3000:3000"
+      - "3124:3124"
     env_file:
-      - .env
+      - .env.docker
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./config:/app/config
+      - ./app-data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/status"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3124/api/status', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
       interval: 30s
       timeout: 10s
       retries: 3

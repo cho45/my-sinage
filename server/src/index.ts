@@ -1,24 +1,10 @@
-// Load environment variables first
-import dotenv from 'dotenv';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cors from 'cors';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Load .env file from parent directory
-dotenv.config({ path: path.join(__dirname, '../../.env') });
-
-// Debug: Check if environment variables are loaded
-console.log('Environment variables loaded:', {
-  PORT: process.env.PORT,
-  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? 'Set' : 'Not set',
-  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? 'Set' : 'Not set',
-  GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
-});
-
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import winston from 'winston';
 import session from 'express-session';
@@ -31,6 +17,9 @@ import { CalendarService } from './calendar/calendarService.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// SSE client connections management
+const sseClients: Set<Response> = new Set();
+
 // Logger setup
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -40,8 +29,6 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   transports: [
-    new winston.transports.File({ filename: path.join(__dirname, '../../logs/error.log'), level: 'error' }),
-    new winston.transports.File({ filename: path.join(__dirname, '../../logs/combined.log') }),
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
@@ -54,13 +41,18 @@ const logger = winston.createLogger({
 // Middleware
 app.use(helmet({
   contentSecurityPolicy: {
+    useDefaults: false,  // Disable default directives including upgrade-insecure-requests
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       scriptSrc: ["'self'", "'unsafe-eval'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"]
+      connectSrc: ["'self'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+      objectSrc: ["'none'"]
     }
   }
 }));
@@ -75,7 +67,6 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
@@ -88,7 +79,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Static files - serve Vue app
+// Static files - serve Vue app (production only)
 const clientPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientPath));
 
@@ -182,16 +173,74 @@ app.use('/auth', authRouter);
 // Admin auth reset endpoint
 app.post('/api/auth/reset', requireAdminAuth, authRouter);
 
+// SSE endpoint for real-time events
+app.get('/api/sse/events', (req: Request, res: Response) => {
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  
+  // Send initial connection message
+  res.write('data: {"type": "connected"}\n\n');
+  
+  // Add client to the set
+  sseClients.add(res);
+  logger.info(`SSE client connected. Total clients: ${sseClients.size}`);
+  
+  // Handle client disconnect
+  req.on('close', () => {
+    sseClients.delete(res);
+    logger.info(`SSE client disconnected. Total clients: ${sseClients.size}`);
+  });
+  
+  // Keep connection alive
+  const keepAlive = setInterval(() => {
+    res.write(':keep-alive\n\n');
+  }, 30000);
+  
+  req.on('close', () => {
+    clearInterval(keepAlive);
+  });
+});
+
+// Admin reload command endpoint
+app.post('/api/admin/reload', requireAdminAuth, (_req: Request, res: Response) => {
+  logger.info('Reload command received from admin');
+  
+  // Send reload event to all connected SSE clients
+  let successCount = 0;
+  const failedClients: Response[] = [];
+  
+  sseClients.forEach(client => {
+    try {
+      client.write(`data: {"type": "reload", "timestamp": "${new Date().toISOString()}"}\n\n`);
+      successCount++;
+    } catch (error) {
+      logger.error('Failed to send reload event to client:', error);
+      failedClients.push(client);
+    }
+  });
+  
+  // Remove failed clients
+  failedClients.forEach(client => sseClients.delete(client));
+  
+  res.json({ 
+    success: true, 
+    message: `Reload command sent to ${successCount} client(s)`,
+    totalClients: sseClients.size
+  });
+});
+
 // Setup and Admin pages are handled by Vue Router
 // These will be served through the catch-all route below
 
-// Catch all - serve Vue app
 app.get('*', (_req: Request, res: Response) => {
   res.sendFile(path.join(clientPath, 'index.html'));
 });
 
 // Error handling middleware
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled error:', err);
   res.status(500).json({ 
     error: 'Internal server error',

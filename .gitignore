@@ -6,6 +6,7 @@ yarn-error.log*
 
 # Environment variables
 .env
+.env.docker
 .env.local
 .env.*.local
 
@@ -14,11 +15,8 @@ dist/
 build/
 *.tsbuildinfo
 
-# Data and logs
-data/tokens/*
-!data/tokens/.gitkeep
-logs/*
-!logs/.gitkeep
+# Data directory
+app-data/
 
 # IDE
 .vscode/

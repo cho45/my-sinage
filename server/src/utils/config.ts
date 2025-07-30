@@ -1,11 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { Config } from '../types/index.js';
 import winston from 'winston';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { CONFIG_PATH } from './paths.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -15,13 +12,25 @@ const logger = winston.createLogger({
   ]
 });
 
-const CONFIG_PATH = path.join(__dirname, '../../../config/calendars.json');
+const DEFAULT_CONFIG: Config = {
+  calendars: [],
+  display: {
+    weekStart: 0,
+    language: 'ja-JP',
+    timezone: 'Asia/Tokyo'
+  }
+};
 
 export async function loadConfig(): Promise<Config> {
   try {
     const data = await fs.readFile(CONFIG_PATH, 'utf-8');
     return JSON.parse(data) as Config;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      logger.info('Config file not found, creating default configuration');
+      await saveConfig(DEFAULT_CONFIG);
+      return DEFAULT_CONFIG;
+    }
     logger.error('Failed to load config:', error);
     throw new Error('Failed to load configuration');
   }
@@ -29,6 +38,10 @@ export async function loadConfig(): Promise<Config> {
 
 export async function saveConfig(config: Config): Promise<void> {
   try {
+    // Ensure directory exists
+    const configDir = path.dirname(CONFIG_PATH);
+    await fs.mkdir(configDir, { recursive: true });
+    
     const data = JSON.stringify(config, null, 2);
     await fs.writeFile(CONFIG_PATH, data, 'utf-8');
     logger.info('Configuration saved successfully');

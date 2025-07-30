@@ -1,17 +1,14 @@
 <template>
   <div class="calendar-container">
     <div class="calendar-header">
-      <h1>{{ currentMonthYear }}</h1>
-      <div class="last-update" v-if="lastUpdate">
-        最終更新: {{ formatLastUpdate }}
+      <h1>{{ currentMonthYear }} {{ currentTime }}</h1>
+      <div class="last-update" @click="() => fetchEvents()" :class="{ clickable: !loading }">
+        <span v-if="loading">読み込み中...</span>
+        <span v-else-if="lastUpdate">最終更新: {{ formatLastUpdate }}</span>
       </div>
     </div>
 
-    <div v-if="loading" class="loading">
-      <p>カレンダーを読み込み中...</p>
-    </div>
-
-    <div v-else-if="error" class="error">
+    <div v-if="error" class="error">
       <p>{{ error }}</p>
       <button @click="retry" class="retry-button">再試行</button>
     </div>
@@ -53,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useCalendar } from '@/composables/useCalendar'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
@@ -90,6 +87,18 @@ const currentMonthYear = computed(() => {
   const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][today.getDay()]
   return `${year}年${month}月${date}日（${dayOfWeek}）`
 })
+
+// 現在時刻の管理
+const currentTime = ref('')
+let timeInterval: ReturnType<typeof setInterval> | undefined
+
+const updateCurrentTime = () => {
+  const now = new Date()
+  const hours = now.getHours().toString().padStart(2, '0')
+  const minutes = now.getMinutes().toString().padStart(2, '0')
+  const seconds = now.getSeconds().toString().padStart(2, '0')
+  currentTime.value = `${hours}:${minutes}:${seconds}`
+}
 
 const formatLastUpdate = computed(() => {
   if (!lastUpdate.value) return ''
@@ -138,8 +147,68 @@ const retry = () => {
   fetchEvents()
 }
 
+// SSE connection management
+let eventSource: EventSource | null = null
+const sseConnected = ref(false)
+
+const connectSSE = () => {
+  if (eventSource) {
+    eventSource.close()
+  }
+  
+  eventSource = new EventSource('/api/sse/events')
+  
+  eventSource.onopen = () => {
+    console.log('SSE connection established')
+    sseConnected.value = true
+  }
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      
+      if (data.type === 'reload') {
+        console.log('Reload command received from server')
+        // Reload the page
+        window.location.reload()
+      } else if (data.type === 'connected') {
+        console.log('SSE connected successfully')
+      }
+    } catch (error) {
+      console.error('Failed to parse SSE message:', error)
+    }
+  }
+  
+  eventSource.onerror = (error) => {
+    console.error('SSE connection error:', error)
+    sseConnected.value = false
+    
+    // Reconnect after 5 seconds
+    setTimeout(() => {
+      console.log('Attempting to reconnect SSE...')
+      connectSSE()
+    }, 5000)
+  }
+}
+
 onMounted(() => {
   fetchEvents()
+  connectSSE()
+  
+  // 現在時刻の更新を開始
+  updateCurrentTime()
+  timeInterval = setInterval(updateCurrentTime, 1000)
+})
+
+onUnmounted(() => {
+  if (eventSource) {
+    eventSource.close()
+  }
+  
+  // 時刻更新のインターバルをクリア
+  if (timeInterval) {
+    clearInterval(timeInterval)
+  }
 })
 </script>
 
@@ -148,19 +217,20 @@ onMounted(() => {
   width: 100vw;
   height: 100vh;
   max-width: 1920px;
-  max-height: 1080px;
-  padding: 40px;
+  max-height: 1280px;
+  padding: 10px;
   background-color: #ffffff;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  cursor: none;
 }
 
 /* サイネージ表示用に固定サイズ */
-@media screen and (min-width: 1920px) and (min-height: 1080px) {
+@media screen and (min-width: 1920px) and (min-height: 1280px) {
   .calendar-container {
     width: 1920px;
-    height: 1080px;
+    height: 1280px;
   }
 }
 
@@ -181,6 +251,16 @@ onMounted(() => {
 .last-update {
   font-size: 18px;
   color: #666;
+}
+
+.last-update.clickable {
+  cursor: pointer !important;
+  user-select: none;
+}
+
+.last-update.clickable:hover {
+  color: #333;
+  text-decoration: underline;
 }
 
 .loading, .error {
@@ -205,7 +285,7 @@ onMounted(() => {
   color: white;
   border: none;
   border-radius: 4px;
-  cursor: pointer;
+  cursor: pointer !important;
   font-family: 'Noto Sans JP', sans-serif;
 }
 
@@ -269,8 +349,16 @@ onMounted(() => {
   border-bottom: none;
 }
 
+.day.sunday {
+  background-color: #fff5f5;
+}
+
 .day.sunday .day-number {
   color: #cc0000;
+}
+
+.day.saturday {
+  background-color: #fff5f5;
 }
 
 .day.saturday .day-number {
@@ -303,12 +391,18 @@ onMounted(() => {
   font-weight: 900;
 }
 
-.day.today.holiday {
+.day.today.holiday,
+.day.today.sunday,
+.day.today.saturday {
   background-color: #fce4ec;
 }
 
 .day.today.sunday .day-number {
   color: #d32f2f;
+}
+
+.day.today.saturday .day-number {
+  color: #1565c0;
 }
 
 .day-number {
@@ -365,6 +459,6 @@ onMounted(() => {
 
 .admin-text {
   user-select: all;
-  cursor: text;
+  cursor: text !important;
 }
 </style>

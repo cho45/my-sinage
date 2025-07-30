@@ -77,6 +77,23 @@
         </div>
       </div>
       
+      <div class="remote-control-section">
+        <h2>リモートコントロール</h2>
+        <div class="control-buttons">
+          <button 
+            @click="reloadAllClients" 
+            class="reload-all-button"
+            :disabled="reloading"
+          >
+            <span v-if="!reloading">🔄 全画面をリロード</span>
+            <span v-else>リロード中...</span>
+          </button>
+          <p class="control-description">
+            接続中のすべてのクライアント画面をリロードします
+          </p>
+        </div>
+      </div>
+      
       <div class="status-section">
         <h3>システム状態</h3>
         <p>ステータス: <span :class="statusClass">{{ systemStatus }}</span></p>
@@ -105,6 +122,7 @@ const systemStatus = ref('正常')
 const lastUpdate = ref('-')
 const calendarList = ref<any[]>([])
 const loadingCalendars = ref(false)
+const reloading = ref(false)
 
 const statusClass = computed(() => ({
   'status-ok': systemStatus.value === '正常',
@@ -214,6 +232,25 @@ const showMessage = (text: string, type: 'success' | 'error') => {
 
 const updateLastUpdate = () => {
   lastUpdate.value = new Date().toLocaleString('ja-JP')
+}
+
+const reloadAllClients = async () => {
+  if (!confirm('すべてのクライアント画面をリロードしますか？')) {
+    return
+  }
+  
+  reloading.value = true
+  try {
+    const response = await axios.post('/api/admin/reload')
+    showMessage(
+      `${response.data.message} (接続数: ${response.data.totalClients})`,
+      'success'
+    )
+  } catch (err) {
+    showMessage('リロードコマンドの送信に失敗しました', 'error')
+  } finally {
+    reloading.value = false
+  }
 }
 
 onMounted(() => {
@@ -435,6 +472,54 @@ onMounted(() => {
 .reset-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.remote-control-section {
+  background: white;
+  padding: 32px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.remote-control-section h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.control-buttons {
+  margin-top: 16px;
+}
+
+.reload-all-button {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reload-all-button:hover:not(:disabled) {
+  background-color: #f57c00;
+}
+
+.reload-all-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.control-description {
+  margin-top: 12px;
+  color: #666;
+  font-size: 14px;
 }
 
 .status-section {

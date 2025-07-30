@@ -15,7 +15,7 @@ const getOAuthManager = (): OAuthManager => {
  * Middleware to check if user is authenticated with Google
  */
 export async function requireGoogleAuth(
-  req: Request,
+  _req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {

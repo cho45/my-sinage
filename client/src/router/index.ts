@@ -8,7 +8,7 @@ const router = createRouter({
       path: '/',
       name: 'calendar',
       component: () => import('@/components/CalendarView.vue'),
-      beforeEnter: async (to, from, next) => {
+      beforeEnter: async (_to, _from, next) => {
         try {
           const response = await axios.get('/auth/status')
           if (response.data.authenticated) {

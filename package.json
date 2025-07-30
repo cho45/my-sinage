@@ -12,7 +12,8 @@
     "client:build": "cd client && npm run build",
     "server:build": "cd server && npm run build",
     "start": "cd server && npm start",
-    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "typecheck": "cd server && npm run typecheck && cd ../client && npm run typecheck"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

@@ -26,16 +26,17 @@ RUN npm ci --production && cd server && npm ci --production
 # Copy built files
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=client-builder /app/client/dist ./client/dist
-COPY config ./config
-
-# Create necessary directories
-RUN mkdir -p data/tokens logs
 
 # Set environment
 ENV NODE_ENV=production
+ENV DATA_DIR=/app/data
+ENV PORT=3124
+
+# Create data directory
+RUN mkdir -p /app/data && chmod 755 /app/data
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3124
 
 # Start server
-CMD ["node", "server/dist/index.js"]
+CMD ["node", "server/dist/startup.js"]

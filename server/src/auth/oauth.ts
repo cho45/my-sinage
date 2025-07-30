@@ -1,20 +1,15 @@
 import { google } from 'googleapis';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import winston from 'winston';
 import { AuthToken } from '../types/index.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { TOKEN_PATH } from '../utils/paths.js';
 
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
   transports: [new winston.transports.Console()]
 });
-
-const TOKEN_PATH = path.join(__dirname, '../../../data/tokens/token.json');
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
 
 export class OAuthManager {
@@ -67,6 +62,10 @@ export class OAuthManager {
    */
   private async saveToken(token: AuthToken): Promise<void> {
     try {
+      // Ensure directory exists
+      const tokenDir = path.dirname(TOKEN_PATH);
+      await fs.mkdir(tokenDir, { recursive: true });
+      
       await fs.writeFile(TOKEN_PATH, JSON.stringify(token, null, 2));
       logger.info('Token saved successfully');
     } catch (error) {
