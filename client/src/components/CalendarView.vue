@@ -1,7 +1,17 @@
 <template>
   <div class="calendar-container">
     <div class="calendar-header">
-      <h1>{{ currentMonthYear }} {{ currentTime }}</h1>
+      <h1 class="date-time-display">
+        <span class="date-part">
+          <span class="year-part">
+            <small>{{ currentMonthYear.year }}年</small>
+            <small class="era">{{ currentMonthYear.era }}{{ currentMonthYear.eraYear }}年</small>
+          </span>
+          <span class="month-day">{{ currentMonthYear.month }}<small>月</small> {{ currentMonthYear.date }}<small>日</small></span>
+          <span class="day-of-week">{{ currentMonthYear.dayOfWeek }}</span>
+        </span>
+        <span class="time-part">{{ currentTime }}</span>
+      </h1>
       <div class="last-update" @click="() => fetchEvents()" :class="{ clickable: !loading }">
         <span v-if="loading">読み込み中...</span>
         <span v-else-if="lastUpdate">最終更新: {{ formatLastUpdate }}</span>
@@ -85,7 +95,22 @@ const currentMonthYear = computed(() => {
   const month = today.getMonth() + 1
   const date = today.getDate()
   const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][today.getDay()]
-  return `${year}年${month}月${date}日（${dayOfWeek}）`
+  
+  // 和暦計算
+  let era = ''
+  let eraYear = 0
+  if (year >= 2019) {
+    era = '令和'
+    eraYear = year - 2018
+  } else if (year >= 1989) {
+    era = '平成'
+    eraYear = year - 1988
+  } else if (year >= 1926) {
+    era = '昭和'
+    eraYear = year - 1925
+  }
+  
+  return { year, month, date, dayOfWeek, era, eraYear }
 })
 
 // 現在時刻の管理
@@ -238,13 +263,56 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 
-.calendar-header h1 {
-  font-size: 48px;
-  font-weight: 700;
+.date-time-display {
   margin: 0;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.date-part {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.month-day {
+  font-size: 48px;
+  font-weight: 900;
+}
+
+.month-day small {
+  font-size: 24px;
+  font-weight: 900;
+  margin-left: 2px;
+}
+
+.day-of-week {
+  font-size: 38px;
+  font-weight: 900;
+}
+
+.year-part {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+  font-size: 28px;
+  color: #333;
+}
+
+.era {
+  color: #555;
+}
+
+.time-part {
+  font-size: 50px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
   color: #333;
 }
 
