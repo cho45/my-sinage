@@ -34,18 +34,108 @@ export function useCalendar() {
 
   // Group events by date
   const eventsByDate = computed(() => {
-    const grouped: Record<string, CalendarEvent[]> = {}
+    const grouped: Record<string, any[]> = {}
     
     events.value.forEach(event => {
-      const dateKey = event.start.split('T')[0] // Get YYYY-MM-DD part
-      if (!grouped[dateKey]) {
-        grouped[dateKey] = []
+      const startDateStr = event.start.split('T')[0]
+      const endDateStr = event.end.split('T')[0]
+      
+      // Parse dates safely without timezone issues
+      const [startYear, startMonth, startDay] = startDateStr.split('-').map(Number)
+      const [endYear, endMonth, endDay] = endDateStr.split('-').map(Number)
+      
+      const startDate = new Date(startYear, startMonth - 1, startDay)
+      let endDate = new Date(endYear, endMonth - 1, endDay)
+      
+      // For all-day events, the end date is exclusive (Google Calendar convention)
+      // So we need to subtract one day from the end date
+      if (event.allDay) {
+        endDate.setDate(endDate.getDate() - 1)
       }
-      grouped[dateKey].push(event)
+      
+      // If it's a single-day event
+      if (startDate.getTime() === endDate.getTime()) {
+        const dateKey = startDateStr
+        if (!grouped[dateKey]) {
+          grouped[dateKey] = []
+        }
+        grouped[dateKey].push(event)
+      } else {
+        // Multi-day event
+        const currentDate = new Date(startDate)
+        
+        while (currentDate <= endDate) {
+          const year = currentDate.getFullYear()
+          const month = (currentDate.getMonth() + 1).toString().padStart(2, '0')
+          const day = currentDate.getDate().toString().padStart(2, '0')
+          const dateKey = `${year}-${month}-${day}`
+          
+          if (!grouped[dateKey]) {
+            grouped[dateKey] = []
+          }
+          
+          grouped[dateKey].push(event)
+          
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+      }
     })
     
     return grouped
   })
+
+  // Check if an event spans multiple days
+  const isMultiDayEvent = (event: CalendarEvent) => {
+    const startDate = new Date(event.start.split('T')[0] + 'T00:00:00')
+    let endDate = new Date(event.end.split('T')[0] + 'T00:00:00')
+    
+    if (event.allDay) {
+      endDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000)
+    }
+    
+    return startDate.getTime() !== endDate.getTime()
+  }
+  
+  // Get position info for multi-day event in a specific day
+  const getMultiDayEventPosition = (event: CalendarEvent, dateString: string, weekDays: string[]) => {
+    const startDate = new Date(event.start.split('T')[0] + 'T00:00:00')
+    let endDate = new Date(event.end.split('T')[0] + 'T00:00:00')
+    
+    if (event.allDay) {
+      endDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000)
+    }
+    
+    const currentDate = new Date(dateString + 'T00:00:00')
+    const dayIndex = weekDays.indexOf(dateString)
+    
+    // Calculate start position and span for this week
+    let weekStartDate = new Date(weekDays[0] + 'T00:00:00')
+    let weekEndDate = new Date(weekDays[6] + 'T00:00:00')
+    
+    let displayStartDate = startDate < weekStartDate ? weekStartDate : startDate
+    let displayEndDate = endDate > weekEndDate ? weekEndDate : endDate
+    
+    const displayStartYear = displayStartDate.getFullYear()
+    const displayStartMonth = (displayStartDate.getMonth() + 1).toString().padStart(2, '0')
+    const displayStartDay = displayStartDate.getDate().toString().padStart(2, '0')
+    const displayStartDateStr = `${displayStartYear}-${displayStartMonth}-${displayStartDay}`
+    
+    const displayEndYear = displayEndDate.getFullYear()
+    const displayEndMonth = (displayEndDate.getMonth() + 1).toString().padStart(2, '0')
+    const displayEndDay = displayEndDate.getDate().toString().padStart(2, '0')
+    const displayEndDateStr = `${displayEndYear}-${displayEndMonth}-${displayEndDay}`
+    
+    let startIndex = weekDays.indexOf(displayStartDateStr)
+    let endIndex = weekDays.indexOf(displayEndDateStr)
+    
+    return {
+      isStart: currentDate.getTime() === startDate.getTime(),
+      isEnd: currentDate.getTime() === endDate.getTime(),
+      startIndex: startIndex,
+      span: endIndex - startIndex + 1,
+      dayIndex: dayIndex
+    }
+  }
 
   // Get week structure for calendar display
   const getWeekStructure = (startDate: Date) => {
@@ -58,9 +148,13 @@ export function useCalendar() {
     for (let week = 0; week < 4; week++) {
       const days = []
       for (let day = 0; day < 7; day++) {
+        const year = current.getFullYear()
+        const month = (current.getMonth() + 1).toString().padStart(2, '0')
+        const dayNum = current.getDate().toString().padStart(2, '0')
+        
         days.push({
           date: new Date(current),
-          dateString: current.toISOString().split('T')[0],
+          dateString: `${year}-${month}-${dayNum}`,
           day: current.getDate(),
           month: current.getMonth() + 1,
           year: current.getFullYear(),
@@ -95,6 +189,8 @@ export function useCalendar() {
     fetchEvents,
     eventsByDate,
     getWeekStructure,
+    isMultiDayEvent,
+    getMultiDayEventPosition,
     formatTime
   }
 }

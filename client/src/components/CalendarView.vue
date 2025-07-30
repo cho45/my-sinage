@@ -37,16 +37,27 @@
           class="day"
           :class="getDayClass(day)"
         >
-          <div class="day-number">{{ day.day }}</div>
-          <div class="events">
+          <div class="day-header">
+            <div class="day-number">{{ day.day }}</div>
+          </div>
+          <div class="day-events">
             <div 
               v-for="event in getEventsForDay(day.dateString)" 
               :key="event.id"
               class="event"
-              :style="{ backgroundColor: event.color }"
+              :class="{
+                'multi-day': event.isMultiDay,
+                'multi-day-start': event.isMultiDay && event.isStart,
+                'multi-day-end': event.isMultiDay && event.isEnd,
+                'multi-day-middle': event.isMultiDay && !event.isStart && !event.isEnd
+              }"
+              :style="{ 
+                backgroundColor: event.color,
+                order: event.isMultiDay ? event.id.charCodeAt(0) : 1000 + (event.order || 0)
+              }"
             >
-              <span v-if="!event.allDay" class="event-time">{{ formatTime(event.start) }}</span>
-              <span class="event-title">{{ event.title }}</span>
+              <span v-if="!event.allDay && (!event.isMultiDay || event.isStart)" class="event-time">{{ formatTime(event.start) }}</span>
+              <span v-if="!event.isMultiDay || event.isStart || event.isWeekStart" class="event-title">{{ event.title }}</span>
             </div>
           </div>
         </div>
@@ -70,7 +81,7 @@ const {
   lastUpdate, 
   fetchEvents, 
   eventsByDate, 
-  getWeekStructure, 
+  getWeekStructure,
   formatTime 
 } = useCalendar()
 
@@ -160,12 +171,63 @@ const getDayClass = (day: any) => {
 const getEventsForDay = (dateString: string) => {
   const events = eventsByDate.value[dateString] || []
   
-  // Sort events: all-day events first, then by start time
-  return events.sort((a, b) => {
+  // Check if this is the first day of the week (Sunday)
+  const date = new Date(dateString)
+  const isWeekStart = date.getDay() === 0
+  
+  // Process events and add position info for multi-day events
+  const processedEvents = events.map(event => {
+    // Check if this event appears on multiple days
+    const isMultiDay = (() => {
+      // Count how many days this event appears
+      let count = 0
+      for (const date in eventsByDate.value) {
+        if (eventsByDate.value[date].some(e => e.id === event.id)) {
+          count++
+          if (count > 1) return true
+        }
+      }
+      return false
+    })()
+    
+    // Find the first and last occurrence of this event
+    let isStart = false
+    let isEnd = false
+    
+    if (isMultiDay) {
+      // Find all dates where this event appears
+      const eventDates: string[] = []
+      for (const date in eventsByDate.value) {
+        if (eventsByDate.value[date].some(e => e.id === event.id)) {
+          eventDates.push(date)
+        }
+      }
+      eventDates.sort()
+      
+      isStart = dateString === eventDates[0]
+      isEnd = dateString === eventDates[eventDates.length - 1]
+    }
+    
+    return {
+      ...event,
+      isMultiDay,
+      isStart,
+      isEnd,
+      isWeekStart
+    }
+  })
+  
+  // Sort: multi-day events first, then all-day events, then timed events
+  return processedEvents.sort((a, b) => {
+    if (a.isMultiDay && !b.isMultiDay) return -1
+    if (!a.isMultiDay && b.isMultiDay) return 1
     if (a.allDay && !b.allDay) return -1
     if (!a.allDay && b.allDay) return 1
     return new Date(a.start).getTime() - new Date(b.start).getTime()
-  })
+  }).map((event, index) => ({
+    ...event,
+    order: index
+  }))
 }
 
 const retry = () => {
@@ -365,9 +427,11 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border: 1px solid #ddd;
+  border-left: 1px solid #ddd;
+  border-top: 1px solid #ddd;
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
 }
 
 .weekday-header {
@@ -396,25 +460,93 @@ onUnmounted(() => {
 .week {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  grid-auto-columns: 1fr;
   flex: 1;
+  position: relative;
 }
 
 .day {
-  border-right: 1px solid #ddd;
-  border-bottom: 1px solid #ddd;
-  padding: 12px;
   min-height: 160px;
   display: flex;
   flex-direction: column;
   background-color: #fff;
+  position: relative;
+  overflow: visible;
+  min-width: 0;
+  width: 100%;
 }
 
-.day:nth-child(7n) {
-  border-right: none;
+.day::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  width: 1px;
+  background-color: #ddd;
+  z-index: 1;
 }
 
-.week:last-child .day {
-  border-bottom: none;
+.day::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background-color: #ddd;
+  z-index: 1;
+}
+
+.day-header {
+  padding: 8px 12px;
+  flex-shrink: 0;
+}
+
+.day-events {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  width: 100%;
+}
+
+.day:nth-child(7n)::before {
+  display: none;
+}
+
+.week:last-child .day::after {
+  display: none;
+}
+
+/* Add right border to the grid */
+.calendar-grid::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background-color: #ddd;
+  z-index: 1;
+  border-radius: 0 8px 8px 0;
+}
+
+/* Add bottom border to the grid */
+.calendar-grid::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background-color: #ddd;
+  z-index: 1;
+  border-radius: 0 0 8px 8px;
 }
 
 .day.sunday {
@@ -480,13 +612,6 @@ onUnmounted(() => {
   color: #333;
 }
 
-.events {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-}
 
 .event {
   padding: 4px 8px;
@@ -496,14 +621,99 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
+  height: 24px;
+  min-height: 24px;
   line-height: 1.4;
+  flex-shrink: 0;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.event.multi-day {
+  min-height: 24px;
+  height: 24px;
+  padding: 2px 8px;
+  z-index: 10;
+  line-height: 20px;
+  align-items: center;
+}
+
+.event.multi-day-start,
+.event.multi-day-middle,
+.event.multi-day-end {
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+}
+
+.event.multi-day-start {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  position: relative;
+}
+
+.event.multi-day-start::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -12px;
+  bottom: 0;
+  width: 12px;
+  background-color: inherit;
+  z-index: 11;
+  height: 24px;
+}
+
+.event.multi-day-middle {
+  border-radius: 0;
+  position: relative;
+}
+
+.event.multi-day-middle::before,
+.event.multi-day-middle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  background-color: inherit;
+  z-index: 11;
+  height: 24px;
+}
+
+.event.multi-day-middle::before {
+  left: -12px;
+}
+
+.event.multi-day-middle::after {
+  right: -12px;
+}
+
+.event.multi-day-end {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  position: relative;
+}
+
+.event.multi-day-end::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -12px;
+  bottom: 0;
+  width: 12px;
+  background-color: inherit;
+  z-index: 11;
+  height: 24px;
 }
 
 .event-time {
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .event-title {
@@ -511,6 +721,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .admin-link {
