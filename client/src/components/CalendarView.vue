@@ -106,23 +106,22 @@ const fetchAllData = async () => {
 useAutoRefresh(fetchAllData, 10 * 60 * 1000)
 
 const weekDays = ['日', '月', '火', '水', '木', '金', '土']
-const currentDate = new Date()
+const now = ref(new Date())
 
-const weeks = computed(() => getWeekStructure(currentDate))
+const weeks = computed(() => getWeekStructure(now.value))
 
-const today = new Date()
 const todayString = computed(() => {
-  const year = today.getFullYear()
-  const month = today.getMonth() + 1
-  const date = today.getDate()
+  const year = now.value.getFullYear()
+  const month = now.value.getMonth() + 1
+  const date = now.value.getDate()
   return `${year}-${month.toString().padStart(2, '0')}-${date.toString().padStart(2, '0')}`
 })
 
 const currentMonthYear = computed(() => {
-  const year = today.getFullYear()
-  const month = today.getMonth() + 1
-  const date = today.getDate()
-  const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][today.getDay()]
+  const year = now.value.getFullYear()
+  const month = now.value.getMonth() + 1
+  const date = now.value.getDate()
+  const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][now.value.getDay()]
   
   // 和暦計算
   let era = ''
@@ -146,10 +145,11 @@ const currentTime = ref('')
 let timeInterval: ReturnType<typeof setInterval> | undefined
 
 const updateCurrentTime = () => {
-  const now = new Date()
-  const hours = now.getHours().toString().padStart(2, '0')
-  const minutes = now.getMinutes().toString().padStart(2, '0')
-  const seconds = now.getSeconds().toString().padStart(2, '0')
+  const currentNow = new Date()
+  now.value = currentNow
+  const hours = currentNow.getHours().toString().padStart(2, '0')
+  const minutes = currentNow.getMinutes().toString().padStart(2, '0')
+  const seconds = currentNow.getSeconds().toString().padStart(2, '0')
   currentTime.value = `${hours}:${minutes}:${seconds}`
 }
 
