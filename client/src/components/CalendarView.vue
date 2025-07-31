@@ -12,7 +12,7 @@
         </span>
         <span class="time-part">{{ currentTime }}</span>
       </h1>
-      <div class="last-update" @click="() => fetchEvents()" :class="{ clickable: !loading }">
+      <div class="last-update" @click="() => fetchAllData()" :class="{ clickable: !loading }">
         <span v-if="loading">読み込み中...</span>
         <span v-else-if="lastUpdate">最終更新: {{ formatLastUpdate }}</span>
       </div>
@@ -39,6 +39,9 @@
         >
           <div class="day-header">
             <div class="day-number">{{ day.day }}</div>
+            <div v-if="weatherByDate[day.dateString]" class="day-weather emoji">
+              {{ weatherByDate[day.dateString].emoji }}
+            </div>
           </div>
           <div class="day-events">
             <div 
@@ -74,6 +77,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useCalendar } from '@/composables/useCalendar'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useWeather } from '@/composables/useWeather'
 
 const { 
   loading, 
@@ -85,8 +89,21 @@ const {
   formatTime 
 } = useCalendar()
 
+const {
+  weatherByDate,
+  fetchWeather
+} = useWeather()
+
+// 両方のデータを取得する関数
+const fetchAllData = async () => {
+  await Promise.all([
+    fetchEvents(),
+    fetchWeather()
+  ])
+}
+
 // 10分ごとに自動更新
-useAutoRefresh(fetchEvents, 10 * 60 * 1000)
+useAutoRefresh(fetchAllData, 10 * 60 * 1000)
 
 const weekDays = ['日', '月', '火', '水', '木', '金', '土']
 const currentDate = new Date()
@@ -231,7 +248,7 @@ const getEventsForDay = (dateString: string) => {
 }
 
 const retry = () => {
-  fetchEvents()
+  fetchAllData()
 }
 
 // SSE connection management
@@ -279,7 +296,7 @@ const connectSSE = () => {
 }
 
 onMounted(() => {
-  fetchEvents()
+  fetchAllData()
   connectSSE()
   
   // 現在時刻の更新を開始
@@ -501,6 +518,9 @@ onUnmounted(() => {
 .day-header {
   padding: 8px 12px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .day-events {
@@ -608,8 +628,13 @@ onUnmounted(() => {
 .day-number {
   font-size: 24px;
   font-weight: 700;
-  margin-bottom: 8px;
   color: #333;
+}
+
+.day-weather {
+  font-size: 20px;
+  display: flex;
+  align-items: center;
 }
 
 

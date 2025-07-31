@@ -10,6 +10,7 @@ import winston from 'winston';
 import session from 'express-session';
 import rateLimit from 'express-rate-limit';
 import authRouter from './routes/auth.js';
+import weatherRouter from './routes/weather.js';
 import { requireGoogleAuth, requireAdminAuth } from './middleware/auth.js';
 import { loadConfig, saveConfig, validateConfig } from './utils/config.js';
 import { CalendarService } from './calendar/calendarService.js';
@@ -166,6 +167,9 @@ app.post('/api/config', requireAdminAuth, async (req: Request, res: Response) =>
     res.status(500).json({ error: 'Failed to save configuration' });
   }
 });
+
+// Weather routes
+app.use('/api/weather', weatherRouter);
 
 // Auth routes
 app.use('/auth', authRouter);

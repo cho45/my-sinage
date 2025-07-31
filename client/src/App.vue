@@ -13,4 +13,10 @@
   -moz-osx-font-smoothing: grayscale;
   color: #333;
 }
+
+.emoji {
+  font-family: "Noto Color Emoji", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
 </style>
